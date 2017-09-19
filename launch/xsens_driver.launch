@@ -1,6 +1,22 @@
 <launch>
+   <remap from="/imu/data" to="imu_xsense/data"/>
+   <remap from="fix" to="fix_xsense"/>
+   <remap from="velocity" to="velocity_xsense"/>
+   <remap from="imu_data_str" to="imu_data_str_xsense"/>
+
+	
+ * /imu/data [sensor_msgs/Imu]
+ * /fix_xsense [sensor_msgs/NavSatFix]
+ * /rosout [rosgraph_msgs/Log]
+ * /diagnostics [diagnostic_msgs/DiagnosticArray]
+ * /velocity_xsense [geometry_msgs/TwistStamped]
+ * /time_reference [sensor_msgs/TimeReference]
+ * /imu_data_str [std_msgs/String]
+
+
+
     <!-- parameters -->
-    <arg name="device" default="auto" doc="device file of the IMU"/>
+    <arg name="device" default="/dev/ttyUSB_Xsense" doc="device file of the IMU"/>
     <arg name="baudrate" default="0" doc="baudrate of the IMU"/>
     <arg name="timeout" default="0.002" doc="timeout for the IMU communication"/>
     <arg name="frame_id" default="/imu" doc="frame id of the IMU"/>
@@ -8,7 +24,7 @@
     <arg name="no_rotation_duration" default="0" doc="duration (int in seconds) of the no-rotation calibration procedure"/>
 
     <!-- node -->
-	<node pkg="xsens_driver" type="mtnode.py" name="xsens_driver" output="screen" >
+	<node pkg="xsens_driver" type="mtnode.py" name="xsens_driver" output="screen" respawn="true" respawn_delay="10">
 		<param name="device" value="$(arg device)"/>
 		<param name="baudrate" value="$(arg baudrate)"/>
 		<param name="timeout" value="$(arg timeout)"/>
