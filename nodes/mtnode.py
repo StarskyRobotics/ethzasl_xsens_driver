@@ -11,6 +11,7 @@ from sensor_msgs.msg import Imu, NavSatFix, NavSatStatus, MagneticField,\
     FluidPressure, Temperature, TimeReference
 from geometry_msgs.msg import TwistStamped, PointStamped
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
+from gps_common.msg import GPSFix
 import time
 import datetime
 
@@ -84,6 +85,7 @@ class XSensDriver(object):
         self.diag_pub = None
         self.imu_pub = None
         self.gps_pub = None
+        self.fix_pub = None
         self.vel_pub = None
         self.mag_pub = None
         self.temp_pub = None
@@ -100,6 +102,8 @@ class XSensDriver(object):
         self.last_delta_q_time = None
         self.delta_q_rate = None
 
+        self.fix_msg = GPSFix()
+
     def reset_vars(self):
         self.imu_msg = Imu()
         self.imu_msg.orientation_covariance = (-1., )*9
@@ -108,7 +112,6 @@ class XSensDriver(object):
         self.pub_imu = False
         self.gps_msg = NavSatFix()
         self.pub_gps = False
-        self.fix_msg = GPSFix()
         self.vel_msg = TwistStamped()
         self.pub_vel = False
         self.mag_msg = MagneticField()
@@ -197,6 +200,7 @@ class XSensDriver(object):
             """Publish a time reference."""
             # Doesn't follow the standard publishing pattern since several time
             # refs could be published simultaneously
+            self.fix_msg.time = secs + (nsecs / 1.0e9)
             if self.time_ref_pub is None:
                 self.time_ref_pub = rospy.Publisher(
                     'time_reference', TimeReference, queue_size=10)
@@ -532,13 +536,12 @@ class XSensDriver(object):
                 self.fix_msg.vdop = o['vdop']
                 self.fix_msg.tdop = o['tdop']
                 self.fix_msg.track = o['headMot']
-                self.fix_msg.speed = o['gSpeed']
-                self.fix_msg.err_speed = o['sAcc']
+                self.fix_msg.speed = o['gSpeed'] / 1000.0
+                self.fix_msg.err_speed = o['sAcc'] / 1000.0
                 self.fix_msg.status.satellites_used = o['numSV']
                 self.fix_msg.err_time = o['tAcc']
-                self.fix_msg.time = secs + nsecs / 1.0e9
-                self.fix_msg.err_horz = o['hAcc']
-                self.fix_msg.err_vert = o['vAcc']
+                self.fix_msg.err_horz = o['hAcc'] / 1000.0
+                self.fix_msg.err_vert = o['vAcc'] / 1000.0
                 # TODO velocity?
                 # TODO 2D heading?
                 # TODO DOP?
