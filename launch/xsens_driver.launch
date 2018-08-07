@@ -1,25 +1,20 @@
 <launch>
-   <remap from="/imu/data" to="imu_xsense/data"/>
-   <remap from="fix" to="fix_xsense"/>
-   <remap from="velocity" to="velocity_xsense"/>
-   <remap from="imu_data_str" to="imu_data_str_xsense"/>
-
-	
- * /imu/data [sensor_msgs/Imu]
- * /fix_xsense [sensor_msgs/NavSatFix]
- * /rosout [rosgraph_msgs/Log]
- * /diagnostics [diagnostic_msgs/DiagnosticArray]
- * /velocity_xsense [geometry_msgs/TwistStamped]
- * /time_reference [sensor_msgs/TimeReference]
- * /imu_data_str [std_msgs/String]
-
-
+   <remap from="imu/data" to="/xsens/data"/>
+   <remap from="fix" to="/xsens/fix"/>
+   <remap from="velocity" to="/xsens/vel"/>
+   <remap from="imu_data_str" to="/xsens/data_str"/>
+   <remap from="time_reference" to="/xsens/time"/>
+   <remap from="navsat" to="/xsens/navsat"/>
+   <remap from="imu/mag" to="/xsens/mag"/>
+   <remap from="temperature" to="/xsens/temp"/>
+   <remap from="pressure" to="/xsens/pressure"/>
+   <remap from="ecef" to="/xsens/ecef"/>
 
     <!-- parameters -->
     <arg name="device" default="/dev/ttyUSB_Xsense" doc="device file of the IMU"/>
     <arg name="baudrate" default="0" doc="baudrate of the IMU"/>
     <arg name="timeout" default="0.002" doc="timeout for the IMU communication"/>
-    <arg name="frame_id" default="/imu" doc="frame id of the IMU"/>
+    <arg name="frame_id" default="/xsens" doc="frame id of the IMU"/>
     <arg name="frame_local" default="ENU" doc="desired frame orientation (ENU, NED or NWU)"/>
     <arg name="no_rotation_duration" default="0" doc="duration (int in seconds) of the no-rotation calibration procedure"/>
 
