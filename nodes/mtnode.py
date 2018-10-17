@@ -246,11 +246,12 @@ class XSensDriver(object):
         def fill_from_RAWGPS(rawgps_data):
             '''Fill messages with information from 'rawgps' MTData block.'''
             if rawgps_data['bGPS'] < self.old_bGPS:
-                self.pub_gps = True
                 # LLA
-                self.fix_msg.latitude = self.gps_msg.latitude = rawgps_data['LAT']*1e-7
-                self.fix_msg.longitude = self.gps_msg.longitude = rawgps_data['LON']*1e-7
-                self.fix_msg.altitude = self.gps_msg.altitude = rawgps_data['ALT']*1e-3
+                if rospy.get_time() - self.last_pos > 3:
+                    self.pub_gps = True
+                    self.fix_msg.latitude = self.gps_msg.latitude = rawgps_data['LAT']*1e-7
+                    self.fix_msg.longitude = self.gps_msg.longitude = rawgps_data['LON']*1e-7
+                    self.fix_msg.altitude = self.gps_msg.altitude = rawgps_data['ALT']*1e-3
                 # NED vel # TODO?
             self.old_bGPS = rawgps_data['bGPS']
 
@@ -487,6 +488,7 @@ class XSensDriver(object):
         def fill_from_Position(o):
             '''Fill messages with information from 'Position' MTData2 block.'''
             try:
+                self.last_pos = rospy.get_time()
                 self.fix_msg.latitude = self.gps_msg.latitude = o['lat']
                 self.fix_msg.longitude = self.gps_msg.longitude = o['lon']
                 self.pub_gps = True
@@ -526,10 +528,11 @@ class XSensDriver(object):
                     self.fix_msg.status.orientation_source = o['flags'] & 32 == 32
                     self.fix_msg.status.motion_source = o['flags'] & 2 == 2
                 # lat lon alt
-                self.fix_msg.latitude = self.gps_msg.latitude = o['lat']
-                self.fix_msg.longitude = self.gps_msg.longitude = o['lon']
-                self.fix_msg.altitude = self.gps_msg.altitude = o['height']/1e3
-                self.pub_gps = True
+                if rospy.get_time() - self.last_pos > 3:
+                    self.fix_msg.latitude = self.gps_msg.latitude = o['lat']
+                    self.fix_msg.longitude = self.gps_msg.longitude = o['lon']
+                    self.fix_msg.altitude = self.gps_msg.altitude = o['height']/1e3
+                    self.pub_gps = True
                 self.fix_msg.gdop = o['gdop']
                 self.fix_msg.pdop = o['pdop']
                 self.fix_msg.hdop = o['hdop']
