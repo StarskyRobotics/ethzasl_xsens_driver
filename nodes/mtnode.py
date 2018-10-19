@@ -82,6 +82,7 @@ class XSensDriver(object):
         self.diag_msg.status = [self.stest_stat, self.xkf_stat, self.gps_stat]
 
         # publishers created at first use to reduce topic clutter
+        self.last_pos = 0
         self.diag_pub = None
         self.imu_pub = None
         self.gps_pub = None
