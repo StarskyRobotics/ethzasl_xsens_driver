@@ -9,7 +9,7 @@ import mtdef
 from std_msgs.msg import Header, String, UInt16
 from sensor_msgs.msg import Imu, NavSatFix, NavSatStatus, MagneticField,\
     FluidPressure, Temperature, TimeReference
-from geometry_msgs.msg import TwistStamped, PointStamped
+from geometry_msgs.msg import TwistStamped, PointStamped, QuaternionStamped
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 from gps_common.msg import GPSFix
 import time
@@ -85,6 +85,8 @@ class XSensDriver(object):
         self.last_pos = 0
         self.diag_pub = None
         self.imu_pub = None
+        self.imu_pub_dq = None
+        self.delta_q_pub = None
         self.gps_pub = None
         self.fix_pub = None
         self.vel_pub = None
@@ -111,6 +113,13 @@ class XSensDriver(object):
         self.imu_msg.angular_velocity_covariance = (-1., )*9
         self.imu_msg.linear_acceleration_covariance = (-1., )*9
         self.pub_imu = False
+        self.imu_msg_dq = Imu()
+        self.imu_msg_dq.orientation_covariance = (-1., )*9
+        self.imu_msg_dq.angular_velocity_covariance = (-1., )*9
+        self.imu_msg_dq.linear_acceleration_covariance = (-1., )*9
+        self.pub_imu_dq = False
+        self.delta_q_msg = QuaternionStamped()
+        self.pub_delta_q = False
         self.gps_msg = NavSatFix()
         self.pub_gps = False
         self.vel_msg = TwistStamped()
@@ -463,21 +472,35 @@ class XSensDriver(object):
         def fill_from_Acceleration(o):
             '''Fill messages with information from 'Acceleration' MTData2
             block.'''
-            self.pub_imu = True
+            x = y = z = None
 
             # FIXME not sure we should treat all in that same way
+            # Attempted fix -- no you shouldn't treat them all the same
             try:
                 x, y, z = o['Delta v.x'], o['Delta v.y'], o['Delta v.z']
+                self.imu_msg_dq.linear_acceleration.x = x
+                self.imu_msg_dq.linear_acceleration.y = y
+                self.imu_msg_dq.linear_acceleration.z = z
+                self.imu_msg_dq.linear_acceleration_covariance = (0.0004, 0., 0.,
+                                                               0., 0.0004, 0.,
+                                                               0., 0., 0.0004)
+                self.pub_imu_dq = True
             except KeyError:
                 pass
             try:
                 x, y, z = o['freeAccX'], o['freeAccY'], o['freeAccZ']
+                self.pub_imu = True
             except KeyError:
                 pass
             try:
                 x, y, z = o['accX'], o['accY'], o['accZ']
+                self.pub_imu = True
             except KeyError:
                 pass
+
+            if x is None:
+                return
+
             x, y, z = convert_coords(x, y, z, o['frame'])
             self.imu_msg.linear_acceleration.x = x
             self.imu_msg.linear_acceleration.y = y
@@ -561,6 +584,11 @@ class XSensDriver(object):
                     (o['Delta q0'], o['Delta q1'], o['Delta q2'],
                      o['Delta q3']),
                     o['frame'])
+                self.delta_q_msg.quaternion.x = dqx
+                self.delta_q_msg.quaternion.y = dqy
+                self.delta_q_msg.quaternion.z = dqz
+                self.delta_q_msg.quaternion.w = dqw
+                self.pub_delta_q = True
                 now = rospy.Time.now()
                 if self.last_delta_q_time is None:
                     self.last_delta_q_time = now
@@ -586,18 +614,18 @@ class XSensDriver(object):
                     rotation_speed = rotation_angle * self.delta_q_rate
                     f = rotation_speed / sa_2
                     x, y, z = f*dqx, f*dqy, f*dqz
-                    self.imu_msg.angular_velocity.x = x
-                    self.imu_msg.angular_velocity.y = y
-                    self.imu_msg.angular_velocity.z = z
-                    self.imu_msg.angular_velocity_covariance = (
+                    self.imu_msg_dq.angular_velocity.x = x
+                    self.imu_msg_dq.angular_velocity.y = y
+                    self.imu_msg_dq.angular_velocity.z = z
+                    self.imu_msg_dq.angular_velocity_covariance = (
                         radians(0.025), 0., 0.,
                         0., radians(0.025), 0.,
                         0., 0., radians(0.025))
-                    self.pub_imu = True
-                    self.vel_msg.twist.angular.x = x
-                    self.vel_msg.twist.angular.y = y
-                    self.vel_msg.twist.angular.z = z
-                    self.pub_vel = True
+                    self.pub_imu_dq = True
+                    # self.vel_msg_dq.twist.angular.x = x
+                    # self.vel_msg_dq.twist.angular.y = y
+                    # self.vel_msg_dq.twist.angular.z = z
+                    # self.pub_vel = True
             except KeyError:
                 pass
             try:
@@ -713,6 +741,10 @@ class XSensDriver(object):
         self.h.stamp = rospy.Time.now()
         self.h.frame_id = self.frame_id
 
+        self.h_dq = Header()
+        self.h_dq.stamp = rospy.Time.now()
+        self.h_dq.frame_id = self.frame_id+"_delta"
+
         # set default values
         self.reset_vars()
 
@@ -729,6 +761,16 @@ class XSensDriver(object):
             if self.imu_pub is None:
                 self.imu_pub = rospy.Publisher('imu/data', Imu, queue_size=10)
             self.imu_pub.publish(self.imu_msg)
+        if self.pub_imu_dq:
+            self.imu_msg_dq.header = self.h_dq
+            if self.imu_pub_dq is None:
+                self.imu_pub_dq = rospy.Publisher('imu/ddata', Imu, queue_size=10)
+            self.imu_pub.publish(self.imu_msg)
+        if self.pub_delta_q:
+            self.delta_q_msg.header = self.h_dq
+            if self.delta_q_pub is None:
+                self.delta_q_pub = rospy.Publisher('deltaq', QuaternionStamped, queue_size=10)
+            self.delta_q_pub.publish(self.delta_q_msg)
         if self.pub_gps:
             self.gps_msg.header = self.h
             if self.gps_pub is None:
