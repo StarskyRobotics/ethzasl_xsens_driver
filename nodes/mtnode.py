@@ -575,12 +575,6 @@ class XSensDriver(object):
                     self.fix_msg.status.position_source = o['flags'] & 1 == 1
                     self.fix_msg.status.orientation_source = o['flags'] & 32 == 32
                     self.fix_msg.status.motion_source = o['flags'] & 2 == 2
-                # lat lon alt
-                if rospy.get_time() - self.last_pos > 3:
-                    self.fix_msg.latitude = self.raw_gps_msg.latitude = o['lat']
-                    self.fix_msg.longitude = self.raw_gps_msg.longitude = o['lon']
-                    self.fix_msg.altitude = self.raw_gps_msg.altitude = o['height']/1e3
-                    self.pub_gps = True
                 self.fix_msg.gdop = o['gdop']
                 self.fix_msg.pdop = o['pdop']
                 self.fix_msg.hdop = o['hdop']
@@ -795,7 +789,7 @@ class XSensDriver(object):
             if self.delta_q_pub is None:
                 self.delta_q_pub = rospy.Publisher('deltaq', QuaternionStamped, queue_size=10)
             self.delta_q_pub.publish(self.delta_q_msg)
-        if self.pub_gps:
+        if self.pub_pos_gps:
             self.fix_msg.header = self.h
             if self.fix_pub is None:
                 self.fix_pub = rospy.Publisher('fix', GPSFix, queue_size=10)
