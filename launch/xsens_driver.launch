@@ -20,9 +20,9 @@
     <arg name="frame_id" default="/xsens" doc="frame id of the IMU"/>
     <arg name="frame_local" default="ENU" doc="desired frame orientation (ENU, NED or NWU)"/>
     <arg name="no_rotation_duration" default="0" doc="duration (int in seconds) of the no-rotation calibration procedure"/>
-    <arg name="angular_velocity_covariance_diagonal" default="[0.0004, 0.0004, 0.0004]" doc="Diagonal elements of angular velocity covariance matrix"/>
-    <arg name="linear_acceleration_covariance_diagonal" default="[0.0004, 0.0004, 0.0004]" doc="Diagonal elements of linear acceleration covariance matrix"/>
-    <arg name="orientation_covariance_diagonal" default="[0.01745, 0.01745, 0.15708]" doc="Diagonal elements of the orientation covariance matrix"/>
+    <arg name="angular_velocity_covariance_diagonal" default="[0.0000, 0.0000, 0.0000]" doc="Diagonal elements of angular velocity covariance matrix"/>
+    <arg name="linear_acceleration_covariance_diagonal" default="[0.0000, 0.0000, 0.0000]" doc="Diagonal elements of linear acceleration covariance matrix"/>
+    <arg name="orientation_covariance_diagonal" default="[0.00000, 0.00000, 0.00000]" doc="Diagonal elements of the orientation covariance matrix"/>
 
     <!-- node -->
 	<node pkg="xsens_driver" type="mtnode.py" name="xsens_driver" output="screen" respawn="true" respawn_delay="10">

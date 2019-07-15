@@ -511,9 +511,7 @@ class XSensDriver(object):
                 self.imu_msg_dq.linear_acceleration.x = x
                 self.imu_msg_dq.linear_acceleration.y = y
                 self.imu_msg_dq.linear_acceleration.z = z
-                self.imu_msg_dq.linear_acceleration_covariance = (0.0004, 0., 0.,
-                                                               0., 0.0004, 0.,
-                                                               0., 0., 0.0004)
+                self.imu_msg_dq.linear_acceleration_covariance = self.linear_acceleration_covariance
                 self.pub_imu_dq = True
             except KeyError:
                 pass
