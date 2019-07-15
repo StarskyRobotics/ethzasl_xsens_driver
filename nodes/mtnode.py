@@ -765,7 +765,7 @@ class XSensDriver(object):
             self.imu_msg_dq.header = self.h_dq
             if self.imu_pub_dq is None:
                 self.imu_pub_dq = rospy.Publisher('imu/ddata', Imu, queue_size=10)
-            self.imu_pub.publish(self.imu_msg)
+            self.imu_pub_dq.publish(self.imu_msg_dq)
         if self.pub_delta_q:
             self.delta_q_msg.header = self.h_dq
             if self.delta_q_pub is None:
