@@ -1,7 +1,7 @@
 <launch>
    <remap from="imu/data" to="/xsens/data"/>
-   <remap from="imu/ddata" to="/xsens/ddata"/>
-   <remap from="deltaq" to="/xsens/deltaq"/>
+   <remap from="imu/ddata" to="/xsens/data_sensor_frame"/>
+   <remap from="deltaq" to="/xsens/angular_velocity_deltaq"/>
    <remap from="fix" to="/xsens/fix"/>
    <remap from="velocity" to="/xsens/vel"/>
    <remap from="imu_data_str" to="/xsens/data_str"/>

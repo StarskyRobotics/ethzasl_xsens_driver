@@ -5,8 +5,8 @@ See: http://ros.org/wiki/ethzasl_xsens_driver
 Topics published:
 
 /xsens/data - sensor_msgs/Imu - in Local earth frame
-/xsens/ddata - sensor_msgs/Imu - in Sensor (or Object) fixed frame
-/xsens/deltaq - geometry_msgs/QuaternionStamped - in sensor (or Object) fixed frame, angular velocity (delta quaternion)
+/xsens/data_sensor_frame - sensor_msgs/Imu - in Sensor (or Object) fixed frame. Angular velocity has been converted from deltaq to xyz format, including a time component
+/xsens/angular_velocity_deltaq - geometry_msgs/QuaternionStamped - in sensor (or Object) fixed frame, angular velocity (delta quaternion)
 /xsens/fix - gps_common/GPSFix
 /xsens/vel - geometry_msgs/TwistStamped
 /xsens/data_str - std_msgs/String
