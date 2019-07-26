@@ -19,7 +19,7 @@ import calendar
 import serial
 
 # transform Euler angles or matrix into quaternions
-from math import radians, sqrt, atan2
+from math import radians, sqrt, atan2, asin, acos
 from tf.transformations import quaternion_from_matrix, quaternion_from_euler,\
     identity_matrix
 
@@ -50,6 +50,22 @@ def matrix_from_diagonal(diagonal):
         matrix[i*n + i] = diagonal[i]
     return tuple(matrix)
 
+class Quaternion(object):
+    """
+    Components of quaternions. w is the real part and x, y, z are the imaginary parts
+    """
+    w = 1
+    x = 0
+    y = 0
+    z = 0
+
+class Euler_angles_XYZ(object):
+    """
+    Class to represent XYZ Euler angles in radians
+    """
+    roll = 0
+    pitch = 0
+    yaw = 0
 
 class XSensDriver(object):
 
@@ -150,6 +166,10 @@ class XSensDriver(object):
         self.pub_raw_gps = False
         self.pos_gps_msg = NavSatFix()
         self.pub_pos_gps = False
+        self.imu_msg_dq_self = Imu()
+        self.imu_msg_dq_self.orientation_covariance = (-1., )*9
+        self.imu_msg_dq_self.angular_velocity_covariance = (-1., )*9
+        self.imu_msg_dq_self.linear_acceleration_covariance = (-1., )*9
         self.imu_msg_dq = Imu()
         self.imu_msg_dq.orientation_covariance = (-1., )*9
         self.imu_msg_dq.angular_velocity_covariance = (-1., )*9
@@ -175,6 +195,7 @@ class XSensDriver(object):
         self.ecef_msg = PointStamped()
         self.pub_ecef = False
         self.pub_diag = False
+        self.quat_prev = None
 
     def spin(self):
         try:
@@ -512,6 +533,10 @@ class XSensDriver(object):
                 self.imu_msg_dq.linear_acceleration.y = y
                 self.imu_msg_dq.linear_acceleration.z = z
                 self.imu_msg_dq.linear_acceleration_covariance = self.linear_acceleration_covariance
+                """self.imu_msg_dq_self.linear_acceleration.x = x
+                self.imu_msg_dq_self.linear_acceleration.y = y
+                self.imu_msg_dq_self.linear_acceleration.z = z
+                self.imu_msg_dq_self.linear_acceleration_covariance = self.linear_acceleration_covariance"""
                 self.pub_imu_dq = True
             except KeyError:
                 pass
@@ -594,6 +619,50 @@ class XSensDriver(object):
                 pass
             # TODO publish Sat Info
 
+        def quaternion_multiplication(q1, q2):
+            """
+            Multiplies two quaternions together. Note order is important!
+            :param q1: 1st Quaternion
+            :param q2: 2nd Quaternion
+            :return:
+            q_res: Resultant quaternion after multiplication
+            """
+            q_res = Quaternion()
+            q_res.w = q1.w*q2.w - q1.x*q2.x - q1.y*q2.y - q1.z*q2.z
+            q_res.x = q1.w*q2.x + q2.w*q1.x + q1.y*q2.z - q2.y*q1.z
+            q_res.y = q1.w*q2.y + q2.w*q1.y - q1.x*q2.z + q2.x*q1.z
+            q_res.z = q1.w*q2.z + q2.w*q1.z + q1.x*q2.y - q2.x*q1.y
+
+            q_res_mag = sqrt(q_res.w**2 + q_res.x**2 + q_res.y**2 + q_res.z**2)
+
+            q_res.w = q_res.w / q_res_mag
+            q_res.x = q_res.x / q_res_mag
+            q_res.y = q_res.y / q_res_mag
+            q_res.z = q_res.z / q_res_mag
+
+            return q_res
+
+        def quaternion_to_euler(q):
+            euler_angles = Euler_angles_XYZ()
+            euler_angles.roll = atan2((2.0*(q.w * q.x + q.y * q.z)), (1.0 - 2.0 * (q.x * q.x + q.y * q.y)))
+            euler_angles.pitch = asin(2.0 * (q.w * q.y - q.z * q.x))
+            euler_angles.yaw = atan2((2.0 * (q.w * q.z + q.x * q.y)), (1.0 - 2.0 * (q.y * q.y + q.z * q.z)))
+            return euler_angles
+
+        def euler_diff(euler1, euler2):
+            euler_res = Euler_angles_XYZ()
+            euler_res.roll = euler1.roll - euler2.roll
+            euler_res.pitch = euler1.pitch - euler2.pitch
+            euler_res.yaw = euler1.yaw - euler2.yaw
+            return euler_res
+
+        def convert_to_unit_quaternion(q):
+            q_mag = sqrt(q.w**2 + q.x**2 + q.y**2 + q.z**2)
+            q.w = q.w/q_mag
+            q.x = q.x/q_mag
+            q.y = q.y/q_mag
+            q.z = q.z/q_mag
+
         def fill_from_Angular_Velocity(o):
             '''Fill messages with information from 'Angular Velocity' MTData2
             block.'''
@@ -606,7 +675,34 @@ class XSensDriver(object):
                 self.delta_q_msg.quaternion.w = dqw
                 self.pub_delta_q = True
                 now = rospy.Time.now()
-                if self.last_delta_q_time is None:
+
+                delta_quat = Quaternion()
+                delta_quat.w, delta_quat.x, delta_quat.y, delta_quat.z = dqw, dqx, dqy, dqz
+
+                convert_to_unit_quaternion(delta_quat)
+
+                if self.quat_prev is None:
+                    self.quat_prev = Quaternion()
+
+                euler_prev = quaternion_to_euler(self.quat_prev)
+
+                quat_curr = quaternion_multiplication(self.quat_prev, delta_quat)
+
+                self.quat_prev = quat_curr
+
+                euler_curr = quaternion_to_euler(quat_curr)
+                delta_euler = euler_diff(euler_curr, euler_prev)
+
+                self.imu_msg_dq.angular_velocity.x = delta_euler.roll * (180 / 3.142)
+                self.imu_msg_dq.angular_velocity.y = delta_euler.pitch * (180 / 3.142)
+                self.imu_msg_dq.angular_velocity.z = delta_euler.yaw * (180 / 3.142)
+                self.imu_msg_dq.angular_velocity_covariance = self.angular_velocity_covariance
+
+                ### Direct deltas instead of velocity ###
+                #ca_2, sa_2 = dqw, sqrt(dqx ** 2 + dqy ** 2 + dqz ** 2)
+                #ca = ca_2 ** 2 - sa_2 ** 2
+
+                """if self.last_delta_q_time is None:
                     self.last_delta_q_time = now
                 else:
                     # update rate (filtering needed to account for lag variance)
@@ -623,6 +719,7 @@ class XSensDriver(object):
                     # \Delta q = [cos{\theta/2}, sin{\theta/2)/\theta . \bm{\omega}
                     # extract rotation angle over delta_t
                     ca_2, sa_2 = dqw, sqrt(dqx**2 + dqy**2 + dqz**2)
+                    mag = sqrt(dqw**2 + dqx**2 + dqy**2 + dqz**2)
                     ca = ca_2**2 - sa_2**2
                     sa = 2*ca_2*sa_2
                     rotation_angle = atan2(sa, ca)
@@ -630,15 +727,20 @@ class XSensDriver(object):
                     rotation_speed = rotation_angle * self.delta_q_rate
                     f = rotation_speed / sa_2
                     x, y, z = f*dqx, f*dqy, f*dqz
-                    self.imu_msg_dq.angular_velocity.x = x
-                    self.imu_msg_dq.angular_velocity.y = y
-                    self.imu_msg_dq.angular_velocity.z = z
+                    rotation_angle_self = 2*acos(ca_2/mag)
+                    self.imu_msg_dq.angular_velocity.x = rotation_angle * (180/3.142)
+                    self.imu_msg_dq.angular_velocity.y = rotation_angle_self * (180/3.142)
+                    self.imu_msg_dq.angular_velocity.z = z * (180/3.142)
+
+                    self.imu_msg_dq.angular_velocity.x = x * (180/3.142)
+                    self.imu_msg_dq.angular_velocity.y = y * (180/3.142)
+                    self.imu_msg_dq.angular_velocity.z = z * (180/3.142)
                     self.imu_msg_dq.angular_velocity_covariance = self.angular_velocity_covariance
                     self.pub_imu_dq = True
                     # self.vel_msg_dq.twist.angular.x = x
                     # self.vel_msg_dq.twist.angular.y = y
                     # self.vel_msg_dq.twist.angular.z = z
-                    # self.pub_vel = True
+                    # self.pub_vel = True"""
             except KeyError:
                 pass
             try:
