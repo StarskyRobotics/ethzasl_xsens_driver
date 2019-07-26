@@ -662,6 +662,7 @@ class XSensDriver(object):
             q.x = q.x/q_mag
             q.y = q.y/q_mag
             q.z = q.z/q_mag
+            return q
 
         def fill_from_Angular_Velocity(o):
             '''Fill messages with information from 'Angular Velocity' MTData2
@@ -679,9 +680,9 @@ class XSensDriver(object):
                 delta_quat = Quaternion()
                 delta_quat.w, delta_quat.x, delta_quat.y, delta_quat.z = dqw, dqx, dqy, dqz
 
-                convert_to_unit_quaternion(delta_quat)
+                delta_quat = convert_to_unit_quaternion(delta_quat)
 
-                if self.quat_prev is None:
+                """if self.quat_prev is None:
                     self.quat_prev = Quaternion()
 
                 euler_prev = quaternion_to_euler(self.quat_prev)
@@ -691,7 +692,9 @@ class XSensDriver(object):
                 self.quat_prev = quat_curr
 
                 euler_curr = quaternion_to_euler(quat_curr)
-                delta_euler = euler_diff(euler_curr, euler_prev)
+                delta_euler = euler_diff(euler_curr, euler_prev)"""
+                
+                delta_euler = quaternion_to_euler(delta_quat)
 
                 self.imu_msg_dq.angular_velocity.x = delta_euler.roll * (180 / 3.142)
                 self.imu_msg_dq.angular_velocity.y = delta_euler.pitch * (180 / 3.142)
