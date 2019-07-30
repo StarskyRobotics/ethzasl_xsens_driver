@@ -17,9 +17,10 @@ import time
 import datetime
 import calendar
 import serial
+import numpy as np
 
 # transform Euler angles or matrix into quaternions
-from math import radians, sqrt, atan2, asin, acos
+from math import radians, sqrt, atan2, asin, acos, sin, cos
 from tf.transformations import quaternion_from_matrix, quaternion_from_euler,\
     identity_matrix
 
@@ -135,6 +136,7 @@ class XSensDriver(object):
         self.imu_pub = None
         self.raw_gps_pub = None
         self.imu_pub_dq = None
+        self.imu_pub_dq_self = None
         self.delta_q_pub = None
         self.fix_pub = None
         self.vel_pub = None
@@ -170,11 +172,14 @@ class XSensDriver(object):
         self.imu_msg_dq_self.orientation_covariance = (-1., )*9
         self.imu_msg_dq_self.angular_velocity_covariance = (-1., )*9
         self.imu_msg_dq_self.linear_acceleration_covariance = (-1., )*9
+        self.pub_imu_dq_self = False
+
         self.imu_msg_dq = Imu()
         self.imu_msg_dq.orientation_covariance = (-1., )*9
         self.imu_msg_dq.angular_velocity_covariance = (-1., )*9
         self.imu_msg_dq.linear_acceleration_covariance = (-1., )*9
         self.pub_imu_dq = False
+
         self.delta_q_msg = QuaternionStamped()
         self.pub_delta_q = False
         self.vel_msg = TwistStamped()
@@ -533,11 +538,12 @@ class XSensDriver(object):
                 self.imu_msg_dq.linear_acceleration.y = y
                 self.imu_msg_dq.linear_acceleration.z = z
                 self.imu_msg_dq.linear_acceleration_covariance = self.linear_acceleration_covariance
-                """self.imu_msg_dq_self.linear_acceleration.x = x
+                self.imu_msg_dq_self.linear_acceleration.x = x
                 self.imu_msg_dq_self.linear_acceleration.y = y
                 self.imu_msg_dq_self.linear_acceleration.z = z
-                self.imu_msg_dq_self.linear_acceleration_covariance = self.linear_acceleration_covariance"""
+                self.imu_msg_dq_self.linear_acceleration_covariance = self.linear_acceleration_covariance
                 self.pub_imu_dq = True
+                self.pub_imu_dq_self = True
             except KeyError:
                 pass
             try:
@@ -664,6 +670,19 @@ class XSensDriver(object):
             q.z = q.z/q_mag
             return q
 
+        def euler_angles_to_rotation_matrix(e_ang):
+            R = np.array([[cos(e_ang.pitch)*cos(e_ang.yaw),
+                  -cos(e_ang.roll)*sin(e_ang.yaw) + sin(e_ang.roll)*sin(e_ang.pitch)*cos(e_ang.yaw),
+                  sin(e_ang.roll)*sin(e_ang.yaw) + cos(e_ang.roll)*sin(e_ang.pitch)*cos(e_ang.yaw)],
+                 [cos(e_ang.pitch)*sin(e_ang.yaw),
+                  cos(e_ang.roll)*cos(e_ang.yaw) + sin(e_ang.roll)*sin(e_ang.pitch)*sin(e_ang.yaw),
+                  -sin(e_ang.roll)*cos(e_ang.yaw) + cos(e_ang.roll)*sin(e_ang.pitch)*sin(e_ang.yaw)],
+                 [-sin(e_ang.pitch),
+                  sin(e_ang.roll)*cos(e_ang.pitch),
+                  cos(e_ang.roll)*cos(e_ang.pitch)
+                  ]])
+            return R
+
         def fill_from_Angular_Velocity(o):
             '''Fill messages with information from 'Angular Velocity' MTData2
             block.'''
@@ -677,13 +696,28 @@ class XSensDriver(object):
                 self.pub_delta_q = True
                 now = rospy.Time.now()
 
+                # Deltas only
+
+                """ca_2, sa_2 = dqw, sqrt(dqx ** 2 + dqy ** 2 + dqz ** 2)
+                ca = ca_2 ** 2 - sa_2 ** 2
+                sa = 2 * ca_2 * sa_2
+                rotation_angle = atan2(sa, ca)
+                f = rotation_angle / sa_2
+                x, y, z = f * dqx, f * dqy, f * dqz
+                self.imu_msg_dq.angular_velocity.x = x * (180 / 3.142)
+                #self.imu_msg_dq.angular_velocity.y = y * (180 / 3.142)
+                self.imu_msg_dq.angular_velocity.z = z * (180 / 3.142)
+                self.imu_msg_dq.angular_velocity_covariance = self.angular_velocity_covariance"""
+
+
                 delta_quat = Quaternion()
                 delta_quat.w, delta_quat.x, delta_quat.y, delta_quat.z = dqw, dqx, dqy, dqz
 
                 delta_quat = convert_to_unit_quaternion(delta_quat)
+                #delta_euler = quaternion_to_euler(delta_quat)
 
-                """if self.quat_prev is None:
-                    self.quat_prev = Quaternion()
+                if self.quat_prev is None:
+                    self.quat_prev = delta_quat
 
                 euler_prev = quaternion_to_euler(self.quat_prev)
 
@@ -692,9 +726,10 @@ class XSensDriver(object):
                 self.quat_prev = quat_curr
 
                 euler_curr = quaternion_to_euler(quat_curr)
-                delta_euler = euler_diff(euler_curr, euler_prev)"""
+
+                delta_euler = euler_diff(euler_curr, euler_prev)
                 
-                delta_euler = quaternion_to_euler(delta_quat)
+                #delta_euler = quaternion_to_euler(delta_quat)
 
                 self.imu_msg_dq.angular_velocity.x = delta_euler.roll * (180 / 3.142)
                 self.imu_msg_dq.angular_velocity.y = delta_euler.pitch * (180 / 3.142)
@@ -703,9 +738,9 @@ class XSensDriver(object):
 
                 ### Direct deltas instead of velocity ###
                 #ca_2, sa_2 = dqw, sqrt(dqx ** 2 + dqy ** 2 + dqz ** 2)
-                #ca = ca_2 ** 2 - sa_2 ** 2
+                #ca = ca_2 ** 2 - sa_2 ** 2"""
 
-                """if self.last_delta_q_time is None:
+                if self.last_delta_q_time is None:
                     self.last_delta_q_time = now
                 else:
                     # update rate (filtering needed to account for lag variance)
@@ -728,12 +763,17 @@ class XSensDriver(object):
                     rotation_angle = atan2(sa, ca)
                     # compute rotation velocity
                     rotation_speed = rotation_angle * self.delta_q_rate
-                    f = rotation_speed / sa_2
+                    f = rotation_angle / sa_2
                     x, y, z = f*dqx, f*dqy, f*dqz
-                    rotation_angle_self = 2*acos(ca_2/mag)
-                    self.imu_msg_dq.angular_velocity.x = rotation_angle * (180/3.142)
-                    self.imu_msg_dq.angular_velocity.y = rotation_angle_self * (180/3.142)
-                    self.imu_msg_dq.angular_velocity.z = z * (180/3.142)
+
+                    delta_quat = Quaternion()
+                    delta_quat.w, delta_quat.x, delta_quat.y, delta_quat.z = dqw, dqx, dqy, dqz
+                    delta_euler = quaternion_to_euler(delta_quat)
+
+                    self.imu_msg_dq_self.angular_velocity.x = delta_euler.roll * (180/3.142)
+                    self.imu_msg_dq_self.angular_velocity.y = delta_euler.pitch * (180/3.142)
+                    self.imu_msg_dq_self.angular_velocity.z = delta_euler.yaw * (180/3.142)
+                    self.imu_msg_dq_self.angular_velocity_covariance = self.angular_velocity_covariance
 
                     self.imu_msg_dq.angular_velocity.x = x * (180/3.142)
                     self.imu_msg_dq.angular_velocity.y = y * (180/3.142)
@@ -889,6 +929,12 @@ class XSensDriver(object):
             if self.imu_pub_dq is None:
                 self.imu_pub_dq = rospy.Publisher('imu/ddata', Imu, queue_size=10)
             self.imu_pub_dq.publish(self.imu_msg_dq)
+        if self.pub_imu_dq_self:
+            self.imu_msg_dq_self.header = self.h_dq
+            if self.imu_pub_dq_self is None:
+                self.imu_pub_dq_self = rospy.Publisher('imu/self_ddata', Imu, queue_size=10)
+            self.imu_pub_dq_self.publish(self.imu_msg_dq_self)
+
         if self.pub_delta_q:
             self.delta_q_msg.header = self.h_dq
             if self.delta_q_pub is None:
