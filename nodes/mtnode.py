@@ -19,7 +19,7 @@ import calendar
 import serial
 
 # transform Euler angles or matrix into quaternions
-from math import radians, sqrt, atan2
+from math import radians, sqrt, atan2, asin
 from tf.transformations import quaternion_from_matrix, quaternion_from_euler,\
     identity_matrix
 
@@ -50,6 +50,22 @@ def matrix_from_diagonal(diagonal):
         matrix[i*n + i] = diagonal[i]
     return tuple(matrix)
 
+class Quaternion(object):
+    """
+    Components of quaternions. w is the real part and x, y, z are the imaginary parts
+    """
+    w = 1
+    x = 0
+    y = 0
+    z = 0
+
+class Euler_angles_XYZ(object):
+    """
+    Class to represent XYZ Euler angles in radians
+    """
+    roll = 0
+    pitch = 0
+    yaw = 0
 
 class XSensDriver(object):
 
@@ -135,7 +151,6 @@ class XSensDriver(object):
 
         # publish a string version of all data; to be parsed by clients
         self.str_pub = rospy.Publisher('imu_data_str', String, queue_size=10)
-        self.last_delta_q_time = None
         self.delta_q_rate = None
 
         self.fix_msg = GPSFix()
@@ -594,6 +609,14 @@ class XSensDriver(object):
                 pass
             # TODO publish Sat Info
 
+        def quaternion_to_euler(q):
+            # Reference https: // en.wikipedia.org / wiki / Conversion_between_quaternions_and_Euler_angles
+            euler_angles = Euler_angles_XYZ()
+            euler_angles.roll = atan2((2.0*(q.w * q.x + q.y * q.z)), (1.0 - 2.0 * (q.x * q.x + q.y * q.y)))
+            euler_angles.pitch = asin(2.0 * (q.w * q.y - q.z * q.x))
+            euler_angles.yaw = atan2((2.0 * (q.w * q.z + q.x * q.y)), (1.0 - 2.0 * (q.y * q.y + q.z * q.z)))
+            return euler_angles
+
         def fill_from_Angular_Velocity(o):
             '''Fill messages with information from 'Angular Velocity' MTData2
             block.'''
@@ -605,40 +628,16 @@ class XSensDriver(object):
                 self.delta_q_msg.quaternion.z = dqz
                 self.delta_q_msg.quaternion.w = dqw
                 self.pub_delta_q = True
-                now = rospy.Time.now()
-                if self.last_delta_q_time is None:
-                    self.last_delta_q_time = now
-                else:
-                    # update rate (filtering needed to account for lag variance)
-                    delta_t = (now - self.last_delta_q_time).to_sec()
-                    if self.delta_q_rate is None:
-                        self.delta_q_rate = 1./delta_t
-                    delta_t_filtered = .95/self.delta_q_rate + .05*delta_t
-                    # rate in necessarily integer
-                    self.delta_q_rate = round(1./delta_t_filtered)
-                    self.last_delta_q_time = now
-                    # relationship between \Delta q and velocity \bm{\omega}:
-                    # \bm{w} = \Delta t . \bm{\omega}
-                    # \theta = |\bm{w}|
-                    # \Delta q = [cos{\theta/2}, sin{\theta/2)/\theta . \bm{\omega}
-                    # extract rotation angle over delta_t
-                    ca_2, sa_2 = dqw, sqrt(dqx**2 + dqy**2 + dqz**2)
-                    ca = ca_2**2 - sa_2**2
-                    sa = 2*ca_2*sa_2
-                    rotation_angle = atan2(sa, ca)
-                    # compute rotation velocity
-                    rotation_speed = rotation_angle * self.delta_q_rate
-                    f = rotation_speed / sa_2
-                    x, y, z = f*dqx, f*dqy, f*dqz
-                    self.imu_msg_dq.angular_velocity.x = x
-                    self.imu_msg_dq.angular_velocity.y = y
-                    self.imu_msg_dq.angular_velocity.z = z
-                    self.imu_msg_dq.angular_velocity_covariance = self.angular_velocity_covariance
-                    self.pub_imu_dq = True
-                    # self.vel_msg_dq.twist.angular.x = x
-                    # self.vel_msg_dq.twist.angular.y = y
-                    # self.vel_msg_dq.twist.angular.z = z
-                    # self.pub_vel = True
+
+                delta_quat = Quaternion()
+                delta_quat.w, delta_quat.x, delta_quat.y, delta_quat.z = dqw, dqx, dqy, dqz
+                delta_euler = quaternion_to_euler(delta_quat)
+
+                self.imu_msg_dq.angular_velocity.x = delta_euler.roll
+                self.imu_msg_dq.angular_velocity.y = delta_euler.pitch
+                self.imu_msg_dq.angular_velocity.z = delta_euler.yaw
+                self.imu_msg_dq.angular_velocity_covariance = self.angular_velocity_covariance
+                self.pub_imu_dq = True
             except KeyError:
                 pass
             try:
