@@ -152,6 +152,10 @@ class XSensDriver(object):
         # publish a string version of all data; to be parsed by clients
         self.str_pub = rospy.Publisher('imu_data_str', String, queue_size=10)
         self.delta_q_rate = None
+        self.last_delta_q_time = None
+
+        self.delta_v_rate = None
+        self.last_delta_v_time = None
 
         self.fix_msg = GPSFix()
 
@@ -523,11 +527,23 @@ class XSensDriver(object):
             # Attempted fix -- no you shouldn't treat them all the same
             try:
                 x, y, z = o['Delta v.x'], o['Delta v.y'], o['Delta v.z']
-                self.imu_msg_dq.linear_acceleration.x = x
-                self.imu_msg_dq.linear_acceleration.y = y
-                self.imu_msg_dq.linear_acceleration.z = z
-                self.imu_msg_dq.linear_acceleration_covariance = self.linear_acceleration_covariance
-                self.pub_imu_dq = True
+                now = rospy.Time.now()
+                if self.last_delta_v_time is None:
+                    self.last_delta_v_time = now
+                else:
+                    # update rate (filtering needed to account for lag variance)
+                    delta_t = (now - self.last_delta_v_time).to_sec()
+                    if self.delta_v_rate is None:
+                        self.delta_v_rate = 1./delta_t
+                    delta_t_filtered = .95/self.delta_v_rate + .05*delta_t
+                    # rate is necessarily integer
+                    self.delta_v_rate = round(1./delta_t_filtered)
+                    self.last_delta_v_time = now
+                    self.imu_msg_dq.linear_acceleration.x = x * self.delta_v_rate
+                    self.imu_msg_dq.linear_acceleration.y = y * self.delta_v_rate
+                    self.imu_msg_dq.linear_acceleration.z = z * self.delta_v_rate
+                    self.imu_msg_dq.linear_acceleration_covariance = self.linear_acceleration_covariance
+                    self.pub_imu_dq = True
             except KeyError:
                 pass
             try:
@@ -633,11 +649,23 @@ class XSensDriver(object):
                 delta_quat.w, delta_quat.x, delta_quat.y, delta_quat.z = dqw, dqx, dqy, dqz
                 delta_euler = quaternion_to_euler(delta_quat)
 
-                self.imu_msg_dq.angular_velocity.x = delta_euler.roll
-                self.imu_msg_dq.angular_velocity.y = delta_euler.pitch
-                self.imu_msg_dq.angular_velocity.z = delta_euler.yaw
-                self.imu_msg_dq.angular_velocity_covariance = self.angular_velocity_covariance
-                self.pub_imu_dq = True
+                now = rospy.Time.now()
+                if self.last_delta_q_time is None:
+                    self.last_delta_q_time = now
+                else:
+                    # update rate (filtering needed to account for lag variance)
+                    delta_t = (now - self.last_delta_q_time).to_sec()
+                    if self.delta_q_rate is None:
+                        self.delta_q_rate = 1./delta_t
+                    delta_t_filtered = .95/self.delta_q_rate + .05*delta_t
+                    # rate is necessarily integer
+                    self.delta_q_rate = round(1./delta_t_filtered)
+                    self.last_delta_q_time = now
+                    self.imu_msg_dq.angular_velocity.x = delta_euler.roll * self.delta_q_rate
+                    self.imu_msg_dq.angular_velocity.y = delta_euler.pitch * self.delta_q_rate
+                    self.imu_msg_dq.angular_velocity.z = delta_euler.yaw * self.delta_q_rate
+                    self.imu_msg_dq.angular_velocity_covariance = self.angular_velocity_covariance
+                    self.pub_imu_dq = True
             except KeyError:
                 pass
             try:
